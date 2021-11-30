@@ -6,25 +6,23 @@
 #include <unistd.h>
 #include <string.h>
 #include <ctype.h>
-#include <curl/curl.h>
-#include <jv.h>
 #include <zlib.h>
 #include <getopt.h>
 #include <sys/stat.h>
 #include <libavformat/avio.h>
+#include <jansson.h>
 
-/* }}} */
-/*Misc*/
-/* {{{ */
-
-
-
+static int dw_gr_wr(void *buf, int l, void *d)
+{
+    return gzwrite((gzFile *) d, buf, l);
+}
 
 /*Compressed File Dealing*/
-int myCOMPRESSOR(jv d)
+int myCOMPRESSOR(json_t * d)
 /* {{{ */
 {
-    char *path_dowry = "/files/young/Cw/";
+    char *path_dowry = ".Cw";
+    mkdir(path_dowry, 0777);
     char *path = NULL;
     gzFile file;
 
@@ -43,27 +41,20 @@ int myCOMPRESSOR(jv d)
     free(path);
     if (!file)
 	return 1;
-    jv_dump_string(d, 0);
+    json_dump_callback(dw_gr_wr, d, 0, 0);
     gzflush(file, Z_FINISH);
     gzclose(file);
 
     return 0;
 }
 
-static int myDD_AND_SAVER(char *url, jv * jdata)
+static int dw_net_rd(void *b, int l, void *d)
 {
-    jv j;
-    jv s = jv_string("");
-    int ret = 0;
-    int retry = 0;
-    AVIOContext *io = 0;
-
-    ret = avio_open(&io, url, AVIO_FLAG_READ);
-
-    if (ret < 0)
-	return 1;
+    AVIOContext *io = (AVIOContext *) d;
+    int ret;
 
     char buf[1054];
+
     while (1) {
 	ret = avio_read(io, (unsigned char *) buf, sizeof(buf));
 	if (ret < 0 && ret != AVERROR_EOF) {
@@ -74,22 +65,39 @@ static int myDD_AND_SAVER(char *url, jv * jdata)
 		continue;
 	    }
 	}
-
-	s = jv_string_append_buf(s, buf, ret);
-	retry = 0;
+	return ret == AVERROR_EOF ? 0 : ret;
     }
+}
 
-    j = jv_parse(jv_string_value(s));
+static int myDD_AND_SAVER(char *url, json_t ** jdata)
+{
+    json_t *j = 0;
 
-    if ((jv_is_valid(j)) && (myCOMPRESSOR(j)))
-	return (avio_close(io), *jdata = jv_copy(j), 0);
+    int ret = 0;
+    int retry = 0;
+    AVIOContext *io = 0;
+
+    ret = avio_open(&io, url, AVIO_FLAG_READ);
+
+    if (ret < 0)
+	return 1;
+
+    j = json_load_callback(dw_net_rd, io, 0, 0);
+
+    if (j && (myCOMPRESSOR(j)))
+	return (avio_close(io), *jdata = j, 0);
     // Download, If the jv_t* object is valid save it.
     avio_close(io);
     return 1;
 }
 
 #include <dirent.h>
-int getCOMPRESSED_JSON(char *url, jv * data)
+static dw_gz_rd(void *buf, int l, void *d)
+{
+    return gzread((gzFile *) d, buf, l);
+}
+
+int getCOMPRESSED_JSON(char *url, json_t * j)
 {
     gzFile file;
 
@@ -100,26 +108,7 @@ int getCOMPRESSED_JSON(char *url, jv * data)
 	fprintf(stderr, "Failed To Open %s.\n", url);
 	return 1;
     }
-
-    char *buff = malloc(1);
-    int size = 0;
-
-    while (!gzeof(file)) {
-	char buf[1054];
-	gzgets(file, &*buf, 1054);
-	int lsz = strlen(buf);
-	{
-	    buff = realloc(buff, (lsz + size + 1) * sizeof(char));
-	    memcpy(&buff[size], buf, lsz);
-	    size += lsz;
-	    buff[size] = 0;
-	}
-    }
-
-    if (data) {
-	*data = jv_parse(buff);
-    }
-    free(buff);
+    *j = json_load_file(dw_gz_rd, file, 0, 0);
     gzclose(file);
     return 0;
 }
@@ -230,11 +219,9 @@ static void wd_help()
 
 int wk_download(int argsc, char *(args[]))
 {
-    char **urls = NULL;
+    json_t *urls = json_array();
     char *lang = NULL;
     char *type = NULL;
-    jv j;
-    CURLcode r;
 
     while (1) {
 	int c = getopt_long(argsc, args, "hs:l:t:", WD_Opts, NULL);
@@ -246,7 +233,7 @@ int wk_download(int argsc, char *(args[]))
 	    return 0;
 	    break;
 	case 's':
-	    sox_append_comments(&urls, optarg);
+	    json_array_append(urls, json_string(optarg));
 	    break;
 	case 'l':
 	    lang = strdup(optarg);
@@ -256,12 +243,16 @@ int wk_download(int argsc, char *(args[]))
 	    break;
 	}
     }
-    char **p = urls;
 
-    while (p) {
-	if (!*p)
-	    break;
-	char *tp = *p;
+    int i;
+    json_t *elemnt;
+
+    json_array_foreach(urls, i, elemnt)
+	// No, Squaching since indent will not be able to know that this is a loop not a function.
+    {
+	char *pp = (char *) json_string_value(elemnt);
+	char *tp = pp;
+	json_t *j;
 
 	while (tp) {
 	    char *exxt = NULL;
@@ -326,26 +317,6 @@ static void wr_help()
 	p = p + 1;
     }
 }
-
-static jv getObject(jv a, char *str)
-{
-    return jv_copy(jv_object_get(a, jv_string(str)));
-}
-
-static int get_title(jv data, char **title)
-{
-    jv p = jv_copy(data);
-    if (!jv_is_valid(p))
-	return 0;
-    jv ti = getObject(p, "title");
-
-    *title = strdup(jv_string_value(ti));
-    jv_free(p);
-
-    return !!*title;
-}
-
-static void deal_with(jv j, char *st);
 
 int opt = 0;
 int wd_reader(int argsc, char **args)
