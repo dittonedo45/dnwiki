@@ -14,7 +14,7 @@
 
 static int dw_gr_wr(void *buf, int l, void *d)
 {
-    return gzwrite((gzFile *) d, buf, l);
+    return gzwrite((gzFile) d, buf, l);
 }
 
 /*Compressed File Dealing*/
@@ -41,7 +41,7 @@ int myCOMPRESSOR(json_t * d)
     free(path);
     if (!file)
 	return 1;
-    json_dump_callback(dw_gr_wr, d, 0, 0);
+    json_dump_callback(d, dw_gr_wr, 0, 0);
     gzflush(file, Z_FINISH);
     gzclose(file);
 
@@ -52,6 +52,7 @@ static int dw_net_rd(void *b, int l, void *d)
 {
     AVIOContext *io = (AVIOContext *) d;
     int ret;
+    int retry = 0;
 
     char buf[1054];
 
@@ -92,12 +93,12 @@ static int myDD_AND_SAVER(char *url, json_t ** jdata)
 }
 
 #include <dirent.h>
-static dw_gz_rd(void *buf, int l, void *d)
+static int dw_gz_rd(void *buf, int l, void *d)
 {
-    return gzread((gzFile *) d, buf, l);
+    return gzread((gzFile) d, buf, l);
 }
 
-int getCOMPRESSED_JSON(char *url, json_t * j)
+int getCOMPRESSED_JSON(char *url, json_t ** j)
 {
     gzFile file;
 
@@ -108,7 +109,7 @@ int getCOMPRESSED_JSON(char *url, json_t * j)
 	fprintf(stderr, "Failed To Open %s.\n", url);
 	return 1;
     }
-    *j = json_load_file(dw_gz_rd, file, 0, 0);
+    *j = json_load_callback(dw_gz_rd, file, 0, 0);
     gzclose(file);
     return 0;
 }
@@ -190,7 +191,7 @@ typedef
 struct Mopts {
     WkOpt o;
     char *str;
-    int (*main)(int, char *([]));
+    int (*main)(int, char * ([]));
     char *info;
 };
 struct option WD_Opts[] = {
@@ -214,8 +215,6 @@ static void wd_help()
 	p = p + 1;
     }
 }
-
-#include <sox.h>
 
 int wk_download(int argsc, char *(args[]))
 {
@@ -286,7 +285,6 @@ int wk_download(int argsc, char *(args[]))
 
 	    tp = tmp + 1;
 	}
-	p++;
     }
     return 0;
 }
@@ -319,6 +317,28 @@ static void wr_help()
 }
 
 int opt = 0;
+
+static json_t *get_s_str(json_t * ans, char *sp)
+{
+    char *p = sp;
+    while (p && *p) {
+	char *t = strchr(p, '.');
+	if (!t) {
+	    ans = json_object_get(ans, p);
+	    break;
+	} else {
+	    if (t - p) {
+		char ssp[t - p];
+		ssp[t - p] = 0;
+		strncpy(ssp, p, t - p);
+		ans = json_object_get(ans, ssp);
+	    }
+	}
+	p = t + 1;
+    }
+    return ans;
+}
+
 int wd_reader(int argsc, char **args)
 {
 #define wrset(x) (opt|=(1<<x))
@@ -364,7 +384,7 @@ int wd_reader(int argsc, char **args)
 	fprintf(stderr, "Consider specifying the --path, option.\n");
 	return 1;
     }
-    jv j;
+    json_t *j;
     struct stat st;
 
     if (stat(path, &st))
@@ -392,12 +412,9 @@ int wd_reader(int argsc, char **args)
 	    asprintf(&pa, "%s/%s", path, ent->d_name);
 	    if (!stat(pa, &st) && !S_ISDIR(st.st_mode)
 		&& !getCOMPRESSED_JSON(pa, &j)) {
-#define _(x) jv_copy(x)
-#define t(x) jv_kind_name(jv_get_kind (x))
-#define p(x) jv_string(x)
-		deal_with(_(j), stitle);
-
-		//puts ( pa );
+		j = get_s_str(j, "query.pages");
+		json_dumpf(j, stdout, 0);
+		//puts(pa);
 	    }
 	}
 	closedir(d);
@@ -478,51 +495,6 @@ int main(signed Argsc, char *(Args[]))
     return 0;
 }
 
-/* }}} */
-
-int read_pages(jv a, int *comment, jv * pages)
-/* {{{ */
-{
-    int i = 0;
-    int j = 0;
-    jv p = jv_copy(a);
-    jv el;
-#if 0
-
-    if (!jv_get_kind(p) == JV_KIND_ARRAY) {
-	*comment = -3;
-	return 0;
-    }
-
-    jv_array_foreach(p, j, el) {
-	if (j > 100) {
-	    *comment = -1;
-	    break;
-	}
-#endif
-	jv tmp = getObject(el, "query");
-	if (!jv_is_valid(tmp)) {
-	    *comment = -4;
-	    //break;
-	    return 0;
-	}
-	jv key, val;
-
-	tmp = getObject(tmp, "pages");
-
-	jv_object_foreach(tmp, key, val) {
-	    (pages)[j++] = jv_copy(val);
-	    i++;
-	}
-#if 0
-    }
-#endif
-    *comment = 0;
-    return i;
-}
-
-/* }}} */
-/*Print Untils*/
 static void x_show_text(char *t)
 /* {{{ */
 {
@@ -568,49 +540,3 @@ static void noku(char *ti, char *txt, char *tI)
 	}
     }
 }
-
-/* }}} */
-
-static void deal_with(jv j, char *tiI)
-/* {{{ */
-{
-#if 1
-    //jv_dumpf ( j, stdout, 0 );
-    jv query = _(jv_object_get(j, p("query")));
-    jv pages = _(jv_object_get(query, p("pages")));
-
-    jv_object_foreach(pages, id, dd) {
-	jv cirrusdoc = _(jv_object_get(dd, p("cirrusdoc")));
-
-	if (jv_is_valid(cirrusdoc)) {
-
-	    jv title = _(jv_object_get(dd, p("title")));
-	    if (jv_is_valid(title)) {
-		char *s = strdup(jv_string_value(title));
-		jv_array_foreach(cirrusdoc, i, tmp) {
-		    jv src = _(jv_object_get(tmp, p("source")));
-		    jv txt = _(jv_object_get(src, p("text")));
-
-		    char *text = strdup(jv_string_value(txt));
-		    noku(s, text, tiI);
-		    free(text);
-		}
-		free(s);
-		//jv_dumpf ( cirrusdoc, stdout, 0 );
-	    }
-//   jv_free ( title );
-	}
-//  jv_free ( cirrusdoc );
-    }
-// jv_free ( query );
-// jv_free ( pages );
-// jv_free ( j );
-    //exit ( 1 );
-#else
-    jv pp[9000];
-    int r = 0;
-    read_pages(j, &r, pp);
-#endif
-}
-
-/* }}} */
