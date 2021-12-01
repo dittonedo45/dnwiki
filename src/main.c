@@ -80,7 +80,7 @@ double dltotal, dlnow, ultotal, ulnow;
 int myCOMPRESSOR(void *data, size_t size)
 /* {{{ */
 {
-    char *path_dowry = "/files/young/Cw/";
+    char *path_dowry = ".Cw/";
     char *path = NULL;
     gzFile file;
 
@@ -271,7 +271,7 @@ typedef
 struct Mopts {
     WkOpt o;
     char *str;
-    int (*main)(int, char * ([]));
+    int (*main)(int, char *([]));
     char *info;
 };
 struct option WD_Opts[] = {
@@ -419,7 +419,7 @@ int wd_reader(int argsc, char **args)
 #define wrset(x) (opt|=(1<<x))
 #define wriset(x) (opt&(1<<x))
     char *path = ".Cw/";
-    mkdir(path);
+    mkdir(path, 0755);
     char *stitle = NULL;
 
     if (argsc == 1) {
