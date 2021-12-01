@@ -81,6 +81,7 @@ int myCOMPRESSOR(void *data, size_t size)
 /* {{{ */
 {
     char *path_dowry = ".Cw/";
+    mkdir(path_dowry, 0755);
     char *path = NULL;
     gzFile file;
 
@@ -271,7 +272,7 @@ typedef
 struct Mopts {
     WkOpt o;
     char *str;
-    int (*main)(int, char *([]));
+    int (*main)(int, char * ([]));
     char *info;
 };
 struct option WD_Opts[] = {
