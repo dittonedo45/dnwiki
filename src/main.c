@@ -352,7 +352,7 @@ int wd_reader(int argsc, char **args)
 {
 #define wrset(x) (opt|=(1<<x))
 #define wriset(x) (opt&(1<<x))
-    char *path = "/files/young/Cw/";
+    char *path = ".Cw/";
     char *stitle = NULL;
 
     if (argsc == 1) {
