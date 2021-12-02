@@ -365,6 +365,7 @@ int wk_download(int argsc, char *(args[]))
 	}
 	p++;
     }
+    return 0;
 }
 
 /* }}} */
@@ -503,6 +504,7 @@ int wd_reader(int argsc, char **args)
 	    puts(path);
 	}
     }
+    return 0;
 }
 
 /* }}} */
