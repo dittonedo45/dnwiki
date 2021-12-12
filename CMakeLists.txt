@@ -3,4 +3,4 @@ cmake_minimum_required(VERSION 3.10)
 	option(MYCOMPDIR "Compile dnwiki" ON)
 	add_executable(dnwiki src/main.c)
 
-	target_link_libraries(dnwiki PUBLIC "-ljq -lm -lz -lcurl -lsox")
+	target_link_libraries(dnwiki PUBLIC "-ljq -lm -lz -lcurl -lsox -ljansson")
